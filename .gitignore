@@ -1,0 +1,9 @@
+renderer 
+*.bin
+*.exe
+*.o
+*.out
+./vscode 
+*.swp
+*.swo
+
