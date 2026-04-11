@@ -86,8 +86,8 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
     float curr_x = x0;
     float curr_y = y0;
 
-    for (int i = 0; i < side_length; i++) {
-        draw_pixel(curr_x, curr_y, color); 
+    for (int i = 0; i <= side_length; i++) {
+        draw_pixel(round(curr_x), round(curr_y), color); 
         curr_x += x_inc;
         curr_y += y_inc;
     }

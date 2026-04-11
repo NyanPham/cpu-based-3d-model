@@ -8,6 +8,7 @@
 #include "mesh.h"
 #include "triangle.h"
 #include "matrix.h"
+#include "light.h"
 
 triangle_t* triangles_to_render = NULL;
 
@@ -52,8 +53,8 @@ void setup(void) {
     float zfar = 100.0;
     proj_matrix = mat4_make_perspective(fov, aspect, znear, zfar);
 
-    load_cube_mesh_data();
-    // load_obj_file_data("./assets/cube.obj");
+    // load_cube_mesh_data();
+    load_obj_file_data("./assets/f22.obj");
 }
 
 void process_input(void) {
@@ -117,9 +118,9 @@ void update(void) {
     // initialize the array of triangles to render
     triangles_to_render = NULL;
 
-    mesh.rotation.x += 0.01;
-    //mesh.rotation.y += 0.01;
-    //mesh.rotation.z += 0.01;
+    mesh.rotation.x += 0.005;
+    mesh.rotation.y += 0.0;
+    mesh.rotation.z += 0.0;
     //mesh.scale.x += 0.002;
     //mesh.scale.y += 0.001;
     //mesh.translation.x += 0.01;
@@ -163,27 +164,31 @@ void update(void) {
             transformed_vertices[j] = transformed_vertex;
         }
    
+        vec3_t vertex_a = vec3_from_vec4(transformed_vertices[0]);
+        vec3_t vertex_b = vec3_from_vec4(transformed_vertices[1]);
+        vec3_t vertex_c = vec3_from_vec4(transformed_vertices[2]);
+
+        vec3_t vector_ab = vec3_sub(vertex_b, vertex_a);
+        vec3_t vector_ac = vec3_sub(vertex_c, vertex_a);
+        vec3_normalize(&vector_ab);
+        vec3_normalize(&vector_ac);
+    
+        vec3_t normal = vec3_cross(vector_ab, vector_ac);
+        vec3_normalize(&normal);
+
+        // check backface culling
         if (cull_method == CULL_BACKFACE) {
-            // check backface culling
-            vec3_t vertex_a = vec3_from_vec4(transformed_vertices[0]);
-            vec3_t vertex_b = vec3_from_vec4(transformed_vertices[1]);
-            vec3_t vertex_c = vec3_from_vec4(transformed_vertices[2]);
-
-            vec3_t vector_ab = vec3_sub(vertex_b, vertex_a);
-            vec3_t vector_ac = vec3_sub(vertex_c, vertex_a);
-            vec3_normalize(&vector_ab);
-            vec3_normalize(&vector_ac);
-        
-            vec3_t normal = vec3_cross(vector_ab, vector_ac);
-            vec3_normalize(&normal);
-
             vec3_t camera_ray = vec3_sub(camera_position, vertex_a);
             float dot_normal_camera = vec3_dot(camera_ray, normal);
 
             if (dot_normal_camera < 0) {
                 continue;
             }
-        }    
+        }   
+
+        // flat shading
+        float dot_normal_light = vec3_dot(normal, light.direction); 
+        uint32_t shaded_color = light_apply_intensity(mesh_face.color, -dot_normal_light);
         
         vec4_t projected_points[3];
 
@@ -194,11 +199,13 @@ void update(void) {
             // scale the points into the view
             projected_points[j].x *= window_width / 2.0;
             projected_points[j].y *= window_height / 2.0;
-            
+           
+            // invert the y value for flipped screen y coordinate
+            projected_points[j].y *= -1;
+
             // translate the projected points to the middle of the screen
             projected_points[j].x += (window_width / 2.0);
             projected_points[j].y += (window_height / 2.0);
-            
         }
         
         // compute the avg_depth for each face based on vertices after transformation
@@ -210,7 +217,7 @@ void update(void) {
                 { projected_points[1].x, projected_points[1].y },
                 { projected_points[2].x, projected_points[2].y },
             },
-            .color = mesh_face.color,
+            .color = shaded_color,
             .avg_depth = avg_depth,
         };
 
