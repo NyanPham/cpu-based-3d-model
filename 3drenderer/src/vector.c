@@ -18,7 +18,7 @@ vec2_t vec2_add(vec2_t a, vec2_t b) {
 vec2_t vec2_sub(vec2_t a, vec2_t b) {
     vec2_t res = {
         .x = a.x - b.x,
-        .y = a.x - b.x
+        .y = a.y - b.y
     };
     return res;
 }
