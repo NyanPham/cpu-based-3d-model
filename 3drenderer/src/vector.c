@@ -3,6 +3,14 @@
 
 // Implementations of vector 2D functions
 
+vec2_t vec2_new(float x, float y) {
+    vec2_t res = {
+        x,
+        y
+    };
+    return res;
+}
+
 float vec2_length(vec2_t v) {
     return sqrt(v.x * v.x + v.y * v.y);
 }
@@ -50,6 +58,15 @@ void vec2_normalize(vec2_t* v) {
 }
 
 // Implementations of vector 3D functions
+
+vec3_t vec3_new(float x, float y, float z) {
+    vec3_t res = {
+        x,
+        y,
+        z,
+    };
+    return res;
+}
 
 float vec3_length(vec3_t v) {
     return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -142,6 +159,15 @@ vec3_t vec3_rotate_z(vec3_t v, float angle) {
     return rotated_vector;
 }
 
+vec3_t vec3_clone(vec3_t* v) {
+    vec3_t res = {
+        .x = v->x,
+        .y = v->y,
+        .z = v->z,
+    };
+
+    return res;
+}
 
 vec4_t vec4_from_vec3(vec3_t v) {
     vec4_t res = {

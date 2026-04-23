@@ -6,6 +6,8 @@ void draw_pixel_depth(
     int x, int y, uint32_t color, 
     vec4_t point_a, vec4_t point_b, vec4_t point_c
 ) {
+    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+
     vec2_t point_p = { x, y };
     vec2_t a = vec2_from_vec4(point_a);
     vec2_t b = vec2_from_vec4(point_b);
@@ -148,6 +150,8 @@ void draw_texel(
     vec4_t point_a, vec4_t point_b, vec4_t point_c,
     tex2_t a_uv, tex2_t b_uv, tex2_t c_uv
 ) {
+    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+
     vec2_t point_p = { x, y };
     vec2_t a = vec2_from_vec4(point_a);
     vec2_t b = vec2_from_vec4(point_b);
