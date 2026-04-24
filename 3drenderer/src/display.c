@@ -2,15 +2,26 @@
 
 #include <math.h>
 
-SDL_Window* g_window = NULL;
-SDL_Renderer* g_renderer = NULL;
+static SDL_Window* window = NULL;
+static SDL_Renderer* renderer = NULL;
 
-uint32_t* g_color_buffer = NULL;
-float* z_buffer = NULL;
+static uint32_t* color_buffer = NULL;
+static float* z_buffer = NULL;
 
-SDL_Texture * g_color_buffer_texture = NULL;
-int window_width = 800;
-int window_height = 600;
+static SDL_Texture * color_buffer_texture = NULL;
+static int window_width = 320;
+static int window_height = 200;
+
+static int render_method = 0;
+static int cull_method = 0;
+
+int get_window_width() {
+    return window_width;
+}
+
+int get_window_height() {
+    return window_height;
+}
 
 int initialize_window(void) {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -21,50 +32,91 @@ int initialize_window(void) {
     // Use SDL to query what the fullscreen max. width and height are
     SDL_DisplayMode display_mode;
     SDL_GetCurrentDisplayMode(0, &display_mode);
-    window_width = display_mode.w;
-    window_height = display_mode.h;
+    int fullscreen_width = display_mode.w;
+    int fullscreen_height = display_mode.h;
+
+    window_width = fullscreen_width / 3;
+    window_height = fullscreen_height / 3;
 
     // Create an SDL Window
-    g_window = SDL_CreateWindow(
+    window = SDL_CreateWindow(
         NULL,
         SDL_WINDOWPOS_CENTERED, // posX
         SDL_WINDOWPOS_CENTERED, // poxY
-        window_width,           // width
-        window_height,          // height
+        fullscreen_width,           // width
+        fullscreen_height,          // height
         SDL_WINDOW_BORDERLESS
     );
 
-    if (!g_window) {
+    if (!window) {
         fprintf(stderr, "Error creating the SDL window.\n");
         return -1;
     }
     
     // Create an SDL renderer
-    g_renderer = SDL_CreateRenderer(g_window, -1, 0);
+    renderer = SDL_CreateRenderer(window, -1, 0);
 
-    if (!g_renderer) {
+    if (!renderer) {
         fprintf(stderr, "Error creating the SDL Renderer.\n");
         return -1;
     }
 
-    SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN);
+    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+
+    // allocate required mem in bytes to hold the color buffer
+    color_buffer = (uint32_t*)malloc(sizeof(uint32_t) * window_width * window_height);
+    z_buffer = (float*)malloc(sizeof(float) * window_width * window_height);
+    
+    color_buffer_texture = SDL_CreateTexture(
+        renderer,
+        SDL_PIXELFORMAT_RGBA32,
+        SDL_TEXTUREACCESS_STREAMING,
+        window_width,
+        window_height
+    );
 
     return 0;
-    
+}
+
+void set_render_method(int method) {
+    render_method = method;
+}
+
+void set_cull_method(int method) {
+    cull_method = method;
+}
+
+int is_cull_backface() {
+    return cull_method == CULL_BACKFACE;
+}
+
+int should_render_filled_triangle() {
+    return render_method == RENDER_FILL_TRIANGLE || render_method == RENDER_FILL_TRIANGLE_WIRE;
+}
+
+int should_render_textured_triangle() {
+    return render_method == RENDER_TEXTURE || render_method == RENDER_TEXTURE_WIRE;
+}
+
+int should_render_wireframe() {
+    return render_method == RENDER_WIRE || render_method == RENDER_WIRE_VERTEX || render_method == RENDER_FILL_TRIANGLE_WIRE || render_method == RENDER_TEXTURE_WIRE;
+}
+
+int should_render_wire_vertex() {
+    return render_method == RENDER_WIRE_VERTEX;
 }
 
 void draw_grid(void) {
     for (int y = 0; y < window_height; y += 10) {
         for (int x = 0; x < window_width; x += 10) {
-            g_color_buffer[(window_width * y) + x] = 0xFF333333;
+            color_buffer[(window_width * y) + x] = 0xFF333333;
         }
     }
 }
 
 void draw_pixel(int x, int y, uint32_t color) {
-    if (x >= 0 && x < window_width && y >= 0 && y < window_height) {
-        g_color_buffer[(window_width * y) + x] = color;
-    }
+    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+    color_buffer[(window_width * y) + x] = color;
 }
 
 void draw_rect(int x, int y, int w, int h, uint32_t color) {
@@ -95,34 +147,42 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
 }
 
 void clear_color_buffer(uint32_t color) {
-    for (int y = 0; y < window_height; y++) {
-        for (int x = 0; x < window_width; x++) {
-            g_color_buffer[(window_width * y) + x] = color;
-        }
+    for (int i = 0; i < window_width * window_height; i++) {
+        color_buffer[i] = color;
     }
 }
 
 void clear_z_buffer() {
-    for (int y = 0; y < window_height; y++) {
-        for (int x = 0; x < window_width; x++) {
-            z_buffer[(window_width * y) + x] = 1.0;
-        }
+    for (int i = 0; i < window_width * window_height; i++) {
+        z_buffer[i] = 1.0;
     }
+}
+
+float get_zbuffer_at(int x, int y) {
+    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return 0;
+    return z_buffer[(window_width * y) + x];
+}
+
+void update_zbuffer_at(int x, int y, float v) {
+    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+    z_buffer[(window_width * y) + x] = v;
 }
 
 void render_color_buffer(void) {
     SDL_UpdateTexture(
-        g_color_buffer_texture,
+        color_buffer_texture,
         NULL,
-        g_color_buffer,
+        color_buffer,
         (int)(window_width * sizeof(uint32_t))
     );
-    SDL_RenderCopy(g_renderer, g_color_buffer_texture, NULL, NULL); 
+    SDL_RenderCopy(renderer, color_buffer_texture, NULL, NULL); 
+    SDL_RenderPresent(renderer);
 }
 
 void destroy_window(void) {
-    SDL_DestroyRenderer(g_renderer);
-    SDL_DestroyWindow(g_window);
+    free(color_buffer);
+    free(z_buffer);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 }
-

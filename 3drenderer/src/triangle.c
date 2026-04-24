@@ -6,7 +6,7 @@ void draw_pixel_depth(
     int x, int y, uint32_t color, 
     vec4_t point_a, vec4_t point_b, vec4_t point_c
 ) {
-    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+    if (x < 0 || x >= get_window_width() || y < 0 || y >= get_window_height()) return;
 
     vec2_t point_p = { x, y };
     vec2_t a = vec2_from_vec4(point_a);
@@ -27,11 +27,11 @@ void draw_pixel_depth(
     interpolated_reciprocal_w = 1.0 - interpolated_reciprocal_w;
         
     // only draw the pixel of the depth value is less than the one previously stored in the z buff
-    if (interpolated_reciprocal_w < z_buffer[(window_width * y) + x]) {
+    if (interpolated_reciprocal_w < get_zbuffer_at(x, y)) {
         draw_pixel(x, y, color);
 
         // update the z buffer with 1/2 of the current pixel
-        z_buffer[(window_width * y) + x] = interpolated_reciprocal_w;
+        update_zbuffer_at(x, y, interpolated_reciprocal_w);
     }
 }
 
@@ -150,7 +150,7 @@ void draw_texel(
     vec4_t point_a, vec4_t point_b, vec4_t point_c,
     tex2_t a_uv, tex2_t b_uv, tex2_t c_uv
 ) {
-    if (x < 0 || x >= window_width || y < 0 || y >= window_height) return;
+    if (x < 0 || x >= get_window_width() || y < 0 || y >= get_window_height()) return;
 
     vec2_t point_p = { x, y };
     vec2_t a = vec2_from_vec4(point_a);
@@ -181,11 +181,11 @@ void draw_texel(
     interpolated_reciprocal_w = 1.0 - interpolated_reciprocal_w;
         
     // only draw the pixel of the depth value is less than the one previously stored in the z buff
-    if (interpolated_reciprocal_w < z_buffer[(window_width * y) + x]) {
+    if (interpolated_reciprocal_w < get_zbuffer_at(x, y)) {
         draw_pixel(x, y, texture[tex_y * texture_width + tex_x]);
 
         // update the z buffer with 1/2 of the current pixel
-        z_buffer[(window_width * y) + x] = interpolated_reciprocal_w;
+        update_zbuffer_at(x, y, interpolated_reciprocal_w);
     }
 }
 
