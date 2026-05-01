@@ -5,6 +5,10 @@
 #include "triangle.h"
 #include "upng.h"
 
+/**
+ * Struct representing a 3D Mesh.
+ * A mesh is usually loaded from an .obj file which contains a list of vertices and faces.
+ */
 typedef struct {
     vec3_t* vertices;       // mesh dynamic array of vertices
     face_t* faces;          // mesh dynamic array of faces

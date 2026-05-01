@@ -1,3 +1,20 @@
+/**
+ * @file clipping.h
+ * @brief Handles Frustum Culling and 3D Polygon Clipping.
+ *
+ * This module implements polygon clipping (often using concepts from the 
+ * Sutherland-Hodgman algorithm). Before we project 3D triangles onto the 2D screen, 
+ * we must ensure they are entirely inside the camera's viewing volume (the "Frustum").
+ * 
+ * - If a triangle is completely outside the frustum, it is discarded (Culling).
+ * - If it is partially inside, it must be clipped against the 6 planes of the frustum 
+ *   (Left, Right, Top, Bottom, Near, Far). 
+ * 
+ * Clipping a triangle against a plane can chop it into a quadrilateral or a more 
+ * complex polygon. We store these intermediate shapes in a `polygon_t` (which can 
+ * hold up to 10 vertices) and later break them back down into smaller triangles.
+ */
+
 #ifndef CLIPPING_H
 #define CLIPPING_H
 

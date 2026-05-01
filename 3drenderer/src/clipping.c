@@ -7,6 +7,17 @@
 
 plane_t frustum_planes[NUM_PLANES];
 
+/**
+ * Initializes the 6 planes of the viewing frustum (Left, Right, Top, Bottom, Near, Far).
+ * 
+ * The frustum is shaped like a pyramid with the top chopped off. 
+ * Each of the 6 planes is defined mathematically by:
+ * 1. A Point (P) lying on the plane.
+ * 2. A Normal Vector (N) pointing perpendicular to the plane and facing INSIDE the frustum.
+ *
+ * Using the dot product of a plane's normal and a vector from the plane's point to any 
+ * test vertex, we can determine if the vertex is "inside" or "outside" the frustum.
+ */
 void init_frustum_planes(float fovx, float fovy, float z_near, float z_far) {
     float cos_half_fovx = cos(fovx / 2);
     float sin_half_fovx = sin(fovx / 2);
@@ -54,10 +65,56 @@ polygon_t create_polygon_from_triangle(vec3_t v0, vec3_t v1, vec3_t v2, tex2_t t
     return polygon;
 }
 
+/**
+ * Linear Interpolation (Lerp) formula.
+ * Finds a value that is 't' percent of the way between 'a' and 'b'.
+ * 
+ * Formula: Result = a + t * (b - a)
+ * - 'a' is the starting value.
+ * - 'b' is the ending value.
+ * - 't' is the interpolation factor (usually between 0.0 and 1.0).
+ * 
+ * Example: If a = 10, b = 20, and t = 0.5, the result is 15 (exactly halfway).
+ * This is heavily used in clipping to find exact intersection coordinates and UVs.
+ */
 float float_lerp(float a, float b, float t){
     return a + t * (b - a);
 }
 
+/**
+ * Clips a polygon against a single frustum plane using the Sutherland-Hodgman algorithm.
+ * 
+ * The algorithm loops through the polygon's vertices (testing edges from `prev_vertex` to `curr_vertex`).
+ * We test the dot product of the vertices against the plane's normal to determine if they are inside or outside.
+ * 
+ * There are 4 possible cases for an edge:
+ * 1. Inside -> Inside: We keep the `curr_vertex`.
+ * 2. Inside -> Outside: We calculate the intersection point at the plane and keep that point.
+ * 3. Outside -> Inside: We calculate the intersection point and keep it, AND we keep the `curr_vertex`.
+ * 4. Outside -> Outside: We discard the edge entirely.
+ * 
+ * By applying this to all edges, we construct a new polygon that fits perfectly within the plane's boundary.
+ * 
+ * TEXTBOOK EXPLANATION: THE t FORMULA (Similar Triangles)
+ * =======================================================
+ * We calculate the intersection factor t using: t = prev_dot / (prev_dot - curr_dot)
+ * 
+ * INTUITION (The Theorem of Thales / Similar Triangles):
+ * ------------------------------------------------------
+ * - prev_dot: Distance from prev_vertex to the plane (projected onto normal)
+ * - curr_dot: Distance from curr_vertex to the plane (negative = outside)
+ * - The total edge length projected onto normal = prev_dot - curr_dot
+ * - The distance from prev to the intersection = prev_dot
+ * 
+ * Visualizing on the normal line:
+ * [prev]----(distance = prev_dot)---->[PLANE]<----(distance = -curr_dot)----[curr]
+ * 
+ * The ratio t = prev_dot / (prev_dot - curr_dot) tells us what fraction
+ * of the edge we need to travel from prev to reach the plane.
+ * 
+ * This is exactly the same as similar triangles: the small triangle (prev to plane)
+ * is proportional to the big triangle (prev to curr).
+ */
 void clip_polygon_against_plane(polygon_t* polygon, int plane) {
     vec3_t plane_point = frustum_planes[plane].point;
     vec3_t plane_normal = frustum_planes[plane].normal;
@@ -130,6 +187,14 @@ void clip_polygon_against_plane(polygon_t* polygon, int plane) {
     polygon->num_vertices = num_inside_vertices;
 }
 
+/**
+ * Triangulates a convex polygon into a set of triangles.
+ * 
+ * When a triangle is clipped against a plane, it might result in a polygon with 3, 4, or more vertices.
+ * Since the rendering pipeline only understands triangles, we must convert this polygon back into triangles.
+ * We use "triangle fan" triangulation: we anchor on the first vertex (index 0) and connect it 
+ * to every consecutive pair of vertices (1&2, 2&3, 3&4, etc.) to form new triangles.
+ */
 void triangles_from_polygon(polygon_t* polygon, triangle_t triangles[], int* num_triangles) {
    for (int i = 0; i < polygon->num_vertices - 2; i++) {
        int idx0 = 0;
@@ -147,6 +212,13 @@ void triangles_from_polygon(polygon_t* polygon, triangle_t triangles[], int* num
    *num_triangles = polygon->num_vertices - 2;
 }
 
+/**
+ * Executes the full clipping pipeline by passing the polygon through all 6 frustum planes.
+ * 
+ * The output of clipping against one plane is fed as the input to the next plane.
+ * If the polygon is completely outside the frustum, the `num_vertices` will eventually 
+ * drop to 0, effectively discarding it.
+ */
 void clip_polygon(polygon_t* polygon) {
     clip_polygon_against_plane(polygon, LEFT_FRUSTUM_PLANE); 
     clip_polygon_against_plane(polygon, RIGHT_FRUSTUM_PLANE); 

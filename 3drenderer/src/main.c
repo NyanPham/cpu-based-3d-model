@@ -85,6 +85,13 @@ void setup(void) {
     ); ; 
 }
 
+/**
+ * ============================================================================
+ * STAGE 2: PROCESS INPUT
+ * ============================================================================
+ * Handles user interactions (keyboard/mouse) via SDL Events.
+ * Updates camera position, rotation, and toggles rendering modes.
+ */
 void process_input(void) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -164,6 +171,22 @@ void process_input(void) {
     }
 }
 
+/**
+ * ============================================================================
+ * STAGE 3: THE GRAPHICS PIPELINE
+ * ============================================================================
+ * This is the heart of the 3D Engine. It transforms raw 3D data into 2D pixels.
+ * 
+ * Pipeline execution order per triangle:
+ * 1. TRANSFORM (World Matrix): Scale -> Rotate -> Translate to position objects in the world.
+ * 2. CAMERA VIEW (View Matrix): Move the world opposite to the camera to simulate looking through it.
+ * 3. BACK-FACE CULLING: Discard triangles facing away from the camera (saves processing power).
+ * 4. LIGHTING: Apply flat shading based on the angle to the light source.
+ * 5. CLIPPING: Cut triangles against the 6 frustum planes (creates new polygons if partially inside).
+ * 6. PERSPECTIVE DIVIDE: Divide x,y,z by 'w' to create depth distortion (objects further away look smaller).
+ * 7. SCREEN MAPPING: Scale the normalized coordinates to fit the actual pixel width/height of the window.
+ * 8. ASSEMBLY: Store the finalized 2D triangles in an array to be drawn in the render stage.
+ */
 void process_graphics_pipeline_stages(mesh_t* mesh) { 
     // initialize the target
     vec3_t target = get_camera_lookat_target();
@@ -214,7 +237,28 @@ void process_graphics_pipeline_stages(mesh_t* mesh) {
         // calculate the triangle face normal
         vec3_t face_normal = get_triangle_normal(transformed_vertices);
        
-        // check backface culling
+        /**
+         * BACK-FACE CULLING INTUITION:
+         * ===========================
+         * We use the Dot Product to determine if the triangle is facing the camera or away from it.
+         * 
+         * THE TEST:
+         * - Compute the surface normal (N) of the triangle using cross product.
+         * - Compute a vector from the camera to the triangle (Camera Ray).
+         * - Calculate: dot(N, Camera_Ray)
+         * 
+         * WHY THIS WORKS:
+         * - If the triangle faces the camera, the normal points TOWARD the camera.
+         *   The dot product will be POSITIVE (angle < 90°).
+         * - If the triangle faces AWAY from the camera, the normal points AWAY from the camera.
+         *   The dot product will be NEGATIVE (angle > 90°).
+         * 
+         * ANALOGY: Think of holding a mirror toward a light source.
+         * If the mirror faces you, you see the reflection (positive).
+         * If the mirror faces away, you don't see the reflection (negative).
+         * 
+         * PERFORMANCE: This simple math test saves us from processing ~50% of triangles!
+         */
         if (is_cull_backface()) {                  
             vec3_t camera_ray = vec3_sub(vec3_new(0, 0, 0), vec3_from_vec4(transformed_vertices[0]));
             float dot_normal_camera = vec3_dot(camera_ray, face_normal);
@@ -225,6 +269,30 @@ void process_graphics_pipeline_stages(mesh_t* mesh) {
         }   
 
         // flat shading
+        /**
+         * FLAT SHADING INTUITION:
+         * =======================
+         * We use the Dot Product to calculate how much light hits this triangle.
+         * 
+         * THE TEST:
+         * - dot(Surface_Normal, Light_Direction)
+         * - This gives us the cosine of the angle between the light and the surface.
+         * 
+         * WHY DOT PRODUCT?
+         * - When light hits a surface head-on (perpendicular), it's brightest.
+         *   The normal and light direction are parallel (angle = 0°), cos(0) = 1.
+         * - When light hits at a glancing angle, it's dimmer.
+         *   Angle = 90°, cos(90) = 0 (no light).
+         * - When light hits from behind, it's negative (backwards).
+         * 
+         * THE SHADING FORMULA:
+         * ====================
+         * intensity = dot(normal, light_direction)
+         * color = original_color * intensity
+         * 
+         * Note: We use -dot because our light direction points TOWARD the light source,
+         * but the normal points OUT of the surface. We need to flip one to measure the angle.
+         */
         float dot_normal_light = vec3_dot(face_normal, get_light_direction()); 
         uint32_t shaded_color = light_apply_intensity(mesh_face.color, -dot_normal_light);
           
@@ -257,7 +325,31 @@ void process_graphics_pipeline_stages(mesh_t* mesh) {
             for (int j = 0; j < 3; j++) {
                 projected_points[j] = mat4_mul_vec4(proj_matrix, triangle_after_clipping.points[j]); 
                 
-                // perform perspective divide
+                /**
+                 * PERSPECTIVE DIVIDE INTUITION:
+                 * =============================
+                 * This is where the magic of 3D depth happens!
+                 * 
+                 * WHAT HAPPENS:
+                 * - The projection matrix stores the original Z-depth in the W component.
+                 * - We divide x, y, and z by w.
+                 * 
+                 * WHY THIS CREATES DEPTH:
+                 * - Objects CLOSER to camera have SMALLER w (less distance to divide by).
+                 *   Result: x and y get DIVIDED by a small number → LARGER screen coordinates.
+                 * - Objects FARTHER from camera have LARGER w.
+                 *   Result: x and y get DIVIDED by a large number → SMALLER screen coordinates.
+                 * 
+                 * VISUAL ANALOGY:
+                 * ===============
+                 * Imagine looking down a long hallway. The doors get progressively smaller
+                 * as they get further away. That's perspective divide doing its job!
+                 * 
+                 * MATHEMATICAL INSIGHT:
+                 * =====================
+                 * This is NOT linear scaling. It's a non-linear transformation that
+                 * mimics how human eyes perceive distance (things appear smaller as they get further).
+                 */
                 if (projected_points[j].w != 0) {
                     projected_points[j].x /= projected_points[j].w;
                     projected_points[j].y /= projected_points[j].w;
@@ -267,7 +359,31 @@ void process_graphics_pipeline_stages(mesh_t* mesh) {
                 // invert the y value for flipped screen y coordinate
                 projected_points[j].y *= -1;
                 
-                // scale the points into the view
+                /**
+                 * SCREEN MAPPING: From Normalized Device Coordinates to Screen Pixels
+                 * =========================================================================
+                 * After perspective divide, all coordinates are in the range [-1, +1].
+                 * This is called "Normalized Device Coordinates" (NDC).
+                 * 
+                 * THE MAPPING PROCESS:
+                 * =====================
+                 * 1. NDC range: x ∈ [-1, 1], y ∈ [-1, 1]
+                 * 2. Scale to half window size: x * (width/2), y * (height/2)
+                 *    - Now x ∈ [-width/2, +width/2], y ∈ [-height/2, +height/2]
+                 * 3. Translate to center: x + (width/2), y + (height/2)
+                 *    - Now x ∈ [0, width], y ∈ [0, height] - actual screen pixels!
+                 * 
+                 * WHY THE Y-AXIS IS INVERTED:
+                 * ============================
+                 * In 3D graphics (OpenGL/DirectX convention):
+                 * - Positive Y points UP in world space
+                 * - Positive Z points TOWARD the viewer (out of the screen)
+                 * 
+                 * In 2D screen space:
+                 * - Positive Y points DOWN (row index increases going down)
+                 * 
+                 * So we flip Y (* -1) to convert from 3D convention to screen convention.
+                 */
                 projected_points[j].x *= get_window_width() / 2.0;
                 projected_points[j].y *= get_window_height() / 2.0;
 
@@ -320,6 +436,19 @@ void update(void) {
     }
 }
 
+/**
+ * ============================================================================
+ * STAGE 5: RENDER
+ * ============================================================================
+ * The final stage. Translates our mathematical arrays into actual colored pixels.
+ * 
+ * 1. Clears the previous frame's color buffer and depth buffer.
+ * 2. Draws the background grid.
+ * 3. Loops over `triangles_to_render` array generated by the Graphics Pipeline.
+ * 4. Calls the appropriate drawing functions (filled, textured, or wireframe) 
+ *    based on the current render mode.
+ * 5. Pushes the final 1D array of pixels to the SDL window hardware.
+ */
 void render(void) {
     clear_color_buffer(0xFF000000);
     clear_z_buffer();

@@ -20,6 +20,41 @@ void load_mesh(const char* obj_filename, const char* png_filename, vec3_t scale,
     mesh_count++;
 }
 
+/**
+ * Loads the mesh data (vertices and faces) from an .obj file into memory.
+ * 
+ * TEXTBOOK EXPLANATION: THE .OBJ FILE FORMAT
+ * ==========================================
+ * Wavefront .obj is a text-based 3D model format. Each line describes something about the model:
+ * 
+ * COMMON COMMANDS:
+ * ================
+ * - "v x y z"      → Vertex position (a point in 3D space)
+ * - "vt u v"       → Texture coordinate (UV mapping for textures)
+ * - "vn x y z"     → Vertex normal (for smooth shading)
+ * - "f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3" → Face (a triangle made of 3 vertices)
+ * 
+ * THE "f" (FACE) LINE:
+ * ====================
+ * Each face references vertices by their INDEX in the file (1-based, not 0-based!).
+ * The format is: vertex_index/texture_index/normal_index
+ * 
+ * Example: "f 1/1/1 2/2/2 3/3/3"
+ * - Means: Triangle using vertices 1, 2, 3
+ * - With texture coords 1, 2, 3
+ * - With normals 1, 2, 3
+ * 
+ * WHY INDICES INSTEAD OF COORDINATES?
+ * ===================================
+ * In a 3D model, multiple faces share the same vertex (e.g., a cube corner is used by 3 faces).
+ * Storing indices instead of duplicating (x,y,z) saves massive amounts of memory!
+ * This is called "indexed mesh" or "indexed geometry".
+ * 
+ * OUR PARSER:
+ * ===========
+ * We only parse "v" (vertices) and "f" (faces) lines, plus "vt" (texture coords).
+ * We assume the .obj file uses the format: f vertex/texture/normal
+ */
 void load_mesh_obj_data(mesh_t* mesh, const char* obj_filename) {
     array_free(mesh->vertices);
     array_free(mesh->faces);
